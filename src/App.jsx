@@ -1,39 +1,24 @@
-import { useState } from "react";
-import { Square } from "./components/Square";
-
-const TURNS = {
-	X: "❌",
-	O: "⭕",
-};
+import { useEffect, useState } from 'react';
+import confetti from 'canvas-confetti';
+import { TURNS, STORAGE_TOKENS } from './constants';
+import { checkWinnerFrom, checkEndGame } from './logic/board';
+import Header from './components/Header';
+import Game from './components/Game';
+import Turns from './components/Turns';
+import WinnerModal from './components/WinnerModal';
+import { saveGameToStorage, resetGameStorage, getStorageData } from './logic/storage';
 
 function App() {
-	const [board, setBoard] = useState(Array(9).fill(null));
+	const [board, setBoard] = useState(() => {
+		const boardFromStorage = getStorageData(STORAGE_TOKENS.BOARD);
+		return boardFromStorage ? JSON.parse(boardFromStorage) : Array(9).fill(null);
+	});
 
-	const [turn, setTurn] = useState(TURNS.X);
+	const [turn, setTurn] = useState(() => {
+		const turnFromStorage = getStorageData(STORAGE_TOKENS.TURN);
+		return turnFromStorage ? JSON.parse(turnFromStorage) : TURNS.X;
+	});
 	const [winner, setWinner] = useState(null); // true:winner, false: tie, null: start
-
-	const WINNER_COMBOS = [
-		[0, 1, 2],
-		[3, 4, 5],
-		[6, 7, 8],
-		[0, 3, 6],
-		[1, 4, 7],
-		[2, 5, 8],
-		[0, 4, 8],
-		[2, 4, 6],
-	];
-
-	const checkWinner = boardToRev => {
-		for (const combo of WINNER_COMBOS) {
-			const [a, b, c] = combo;
-
-			if (boardToRev[a] && boardToRev[a] === boardToRev[b] && boardToRev[a] === boardToRev[c]) {
-				console.log("Winner: ", boardToRev[a]);
-				return boardToRev[a];
-			}
-		}
-		return null;
-	};
 
 	const updateBoard = index => {
 		if (board[index] || winner) return;
@@ -42,58 +27,53 @@ function App() {
 		const newBoard = structuredClone(board);
 		newBoard[index] = turn;
 		setBoard(newBoard);
-		// console.log(newBoard);
 
 		const newTurn = turn === TURNS.X ? TURNS.O : TURNS.X;
 		setTurn(newTurn);
-		const newWinner = checkWinner(newBoard);
-		const areSquaresAvailable = newBoard.filter(square => square === null).length > 0;
-		if (newWinner)
+
+		// saveGameToStorage({ board: newBoard, turn: newTurn });
+
+		const newWinner = checkWinnerFrom(newBoard);
+		if (newWinner) {
+			confetti();
 			setWinner(prevWinner => {
 				console.log(`prev Winner: ${prevWinner} - new Winner: ${newWinner}`);
 				return newWinner;
 			});
+		} else {
+			if (checkEndGame(newBoard)) {
+				setWinner(false);
+			}
+		}
 	};
 
 	const handleRestart = () => {
 		setWinner(null);
 		setTurn(TURNS.X);
 		setBoard(Array(9).fill(null));
+
+		resetGameStorage();
 	};
+
+	useEffect(() => {
+		saveGameToStorage({ board: board, turn: turn });
+	}, [board, turn]);
 
 	return (
 		<main className='board'>
-			<h1>Tic tac toe</h1>
-			<button onClick={handleRestart}>Reset Game</button>
-			<section className='game'>
-				{board.map((_, index) => {
-					return (
-						<Square
-							key={index}
-							index={index}
-							updateBoard={updateBoard}>
-							{board[index]}
-						</Square>
-					);
-				})}
-			</section>
-			<section className='turn'>
-				<Square isSelected={turn === TURNS.X}>{TURNS.X}</Square>
-				<Square isSelected={turn === TURNS.O}>{TURNS.O}</Square>
-			</section>
+			<Header handleRestart={handleRestart} />
 
-			{winner !== null && (
-				<section className='winner'>
-					<div className='text'>
-						<h2>{winner === false ? "Tie" : `${winner} wins!`}</h2>
-						<header className='win'>{winner && <Square>{winner}</Square>}</header>
+			<Game
+				board={board}
+				updateBoard={updateBoard}
+			/>
 
-						<footer>
-							<button onClick={handleRestart}>Restart</button>
-						</footer>
-					</div>
-				</section>
-			)}
+			<Turns turn={turn} />
+
+			<WinnerModal
+				winner={winner}
+				handleRestart={handleRestart}
+			/>
 		</main>
 	);
 }
